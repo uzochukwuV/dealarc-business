@@ -1,0 +1,2638 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 1.0.0
+  description: Verified B2B Deal Network API
+servers:
+  - url: /api
+    description: Base API path
+
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication
+  - name: organizations
+    description: Organization management
+  - name: verification
+    description: KYB verification cases
+  - name: documents
+    description: IPFS document storage
+  - name: wallets
+    description: Circle wallet operations
+  - name: connections
+    description: Org-to-org connections
+  - name: workspaces
+    description: Deal workspaces
+  - name: admin
+    description: Admin operations
+  - name: webhooks
+    description: External webhook listeners
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  # ─── Auth ────────────────────────────────────────────────────────────────────
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserRegistrationInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Auth token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  # ─── Organizations ───────────────────────────────────────────────────────────
+
+  /organizations:
+    get:
+      operationId: listOrganizations
+      tags: [organizations]
+      summary: Discover organizations with public stats
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Search legal/trading names
+        - in: query
+          name: country
+          schema:
+            type: string
+        - in: query
+          name: industry
+          schema:
+            type: string
+        - in: query
+          name: verificationStatus
+          schema:
+            type: string
+            enum: [UNVERIFIED, PENDING, VERIFIED, REJECTED, EXPIRED]
+        - in: query
+          name: verifiedOnly
+          schema:
+            type: boolean
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: Organization discovery results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OrganizationDiscoveryItem"
+    post:
+      operationId: createOrganization
+      tags: [organizations]
+      summary: Create a new organization
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizationCreateInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /organizations/{orgId}:
+    get:
+      operationId: getOrganization
+      tags: [organizations]
+      summary: Get organization by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Organization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateOrganization
+      tags: [organizations]
+      summary: Update organization profile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizationUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+
+  /organizations/{orgId}/stats:
+    get:
+      operationId: getOrganizationStats
+      tags: [organizations]
+      summary: Get public organization stats and reputation
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Public organization stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationDiscoveryItem"
+        "404":
+          description: Organization not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /organizations/{orgId}/members:
+    get:
+      operationId: listOrganizationMembers
+      tags: [organizations]
+      summary: List organization members
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Member list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OrganizationMember"
+    post:
+      operationId: inviteOrganizationMember
+      tags: [organizations]
+      summary: Invite a member to the organization
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberInviteInput"
+      responses:
+        "201":
+          description: Member invited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationMember"
+
+  /organizations/{orgId}/members/{memberId}:
+    patch:
+      operationId: updateOrganizationMember
+      tags: [organizations]
+      summary: Update member role or signer status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationMember"
+    delete:
+      operationId: removeOrganizationMember
+      tags: [organizations]
+      summary: Remove a member from the organization
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Removed
+
+  # ─── Verification ────────────────────────────────────────────────────────────
+
+  /organizations/{orgId}/verification-cases:
+    get:
+      operationId: listVerificationCases
+      tags: [verification]
+      summary: List verification cases for an organization
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Cases
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VerificationCase"
+    post:
+      operationId: submitVerificationCase
+      tags: [verification]
+      summary: Submit a new verification case
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Case submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationCase"
+
+  /organizations/{orgId}/attestation:
+    get:
+      operationId: getVerificationAttestation
+      tags: [verification]
+      summary: Get current verification attestation
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Attestation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationAttestation"
+        "404":
+          description: No attestation found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── Documents ───────────────────────────────────────────────────────────────
+
+  /organizations/{orgId}/documents:
+    get:
+      operationId: listDocuments
+      tags: [documents]
+      summary: List documents for an organization
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Document list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DocumentRef"
+    post:
+      operationId: uploadDocument
+      tags: [documents]
+      summary: Upload and encrypt a document to IPFS via Pinata
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/DocumentUploadInput"
+      responses:
+        "201":
+          description: Uploaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentRef"
+
+  /documents/{docId}/download:
+    get:
+      operationId: downloadDocument
+      tags: [documents]
+      summary: Decrypt and stream a document (authorized access only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: docId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Document stream
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  # ─── Wallets ─────────────────────────────────────────────────────────────────
+
+  /organizations/{orgId}/wallet:
+    get:
+      operationId: getWallet
+      tags: [wallets]
+      summary: Get organization wallet info and balance
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Wallet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WalletInfo"
+
+  /organizations/{orgId}/wallet/transfer:
+    post:
+      operationId: initiateTransfer
+      tags: [wallets]
+      summary: Initiate a transfer from the organization wallet
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: orgId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransferInput"
+      responses:
+        "202":
+          description: Transfer queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferResponse"
+
+  # ─── Admin ───────────────────────────────────────────────────────────────────
+
+  /admin/verification-cases:
+    get:
+      operationId: adminListVerificationCases
+      tags: [admin]
+      summary: List all verification cases (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Cases
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VerificationCase"
+
+  /admin/verification-cases/{caseId}:
+    get:
+      operationId: adminGetVerificationCase
+      tags: [admin]
+      summary: Get a verification case with documents (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Case with documents
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationCaseDetail"
+
+  /admin/verification-cases/{caseId}/decide:
+    post:
+      operationId: adminDecideVerificationCase
+      tags: [admin]
+      summary: Approve, reject, or request more info on a verification case
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: caseId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerificationDecisionInput"
+      responses:
+        "200":
+          description: Updated case
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationCase"
+
+  # ─── Connections ─────────────────────────────────────────────────────────────
+
+  /connections:
+    get:
+      operationId: listConnections
+      tags: [connections]
+      summary: List connections for the current user's organizations
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Connections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Connection"
+    post:
+      operationId: requestConnection
+      tags: [connections]
+      summary: Request a connection to another organization
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectionInput"
+      responses:
+        "201":
+          description: Connection request sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Connection"
+
+  /connections/{connectionId}:
+    get:
+      operationId: getConnection
+      tags: [connections]
+      summary: Get a connection by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: connectionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Connection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Connection"
+
+  /connections/{connectionId}/respond:
+    post:
+      operationId: respondToConnection
+      tags: [connections]
+      summary: Accept, decline, or profile-only a connection request
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: connectionId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectionRespondInput"
+      responses:
+        "200":
+          description: Updated connection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Connection"
+
+  # ─── Workspaces ──────────────────────────────────────────────────────────────
+
+  /workspaces:
+    post:
+      operationId: createWorkspace
+      tags: [workspaces]
+      summary: Create a deal workspace from an accepted connection
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DealWorkspace"
+
+  /workspaces/{workspaceId}:
+    get:
+      operationId: getWorkspace
+      tags: [workspaces]
+      summary: Get a workspace by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DealWorkspace"
+
+  /workspaces/{workspaceId}/members:
+    get:
+      operationId: listWorkspaceMembers
+      tags: [workspaces]
+      summary: List workspace members
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkspaceMember"
+    post:
+      operationId: addWorkspaceMember
+      tags: [workspaces]
+      summary: Add a member to the workspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceMemberInput"
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceMember"
+
+  /workspaces/{workspaceId}/messages:
+    get:
+      operationId: listMessages
+      tags: [workspaces]
+      summary: List messages in a workspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Message"
+    post:
+      operationId: sendMessage
+      tags: [workspaces]
+      summary: Send a message in the workspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageInput"
+      responses:
+        "201":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Message"
+
+  /workspaces/{workspaceId}/messages/{messageId}/convert:
+    post:
+      operationId: convertMessage
+      tags: [workspaces]
+      summary: Convert a message to a structured object (requirement or proposal)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MessageConvertInput"
+      responses:
+        "201":
+          description: Converted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageConvertResponse"
+
+  /workspaces/{workspaceId}/requirements:
+    get:
+      operationId: listRequirements
+      tags: [workspaces]
+      summary: List requirements in a workspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Requirements
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Requirement"
+    post:
+      operationId: createRequirement
+      tags: [workspaces]
+      summary: Create a requirement in the workspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RequirementInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Requirement"
+
+  /workspaces/{workspaceId}/proposals:
+    get:
+      operationId: listProposals
+      tags: [workspaces]
+      summary: List proposals in a workspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Proposals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Proposal"
+    post:
+      operationId: createProposal
+      tags: [workspaces]
+      summary: Create a proposal in the workspace (requires canPropose)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProposalInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Proposal"
+
+  /workspaces/{workspaceId}/proposals/{proposalId}/accept:
+    post:
+      operationId: acceptProposal
+      tags: [workspaces]
+      summary: Accept a proposal (requires canApproveTerms; both parties must accept the same version)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: proposalId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Proposal"
+
+  /workspaces/{workspaceId}/term-sheet:
+    get:
+      operationId: getTermSheet
+      tags: [workspaces]
+      summary: Get the locked term sheet for a workspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Term sheet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TermSheet"
+
+  /workspaces/{workspaceId}/approvals:
+    get:
+      operationId: listApprovals
+      tags: [workspaces]
+      summary: List approval requests for a workspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Approvals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApprovalRequest"
+
+  /workspaces/{workspaceId}/approvals/{approvalId}/decide:
+    post:
+      operationId: decideApproval
+      tags: [workspaces]
+      summary: Approve or reject an internal approval request (requires canApproveTerms)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: approvalId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApprovalDecisionInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalRequest"
+
+  /workspaces/{workspaceId}/agreement:
+    get:
+      operationId: getAgreement
+      tags: [workspaces]
+      summary: Get the agreement for a workspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Agreement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agreement"
+    post:
+      operationId: createAgreement
+      tags: [workspaces]
+      summary: Draft the legal agreement document in CONTRACT_SIGNED status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/AgreementUploadInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agreement"
+
+  /workspaces/{workspaceId}/agreement/sign:
+    post:
+      operationId: signAgreement
+      tags: [workspaces]
+      summary: Sign the agreement (authorized signer with workspace canSign only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Signed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Agreement"
+
+  /workspaces/{workspaceId}/contract:
+    get:
+      operationId: getContract
+      tags: [workspaces]
+      summary: Get the deal contract
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Contract
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DealContract"
+    post:
+      operationId: deployContract
+      tags: [workspaces]
+      summary: Deploy the smart contract through DealFactory (KYB-verified organization only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContractDeployInput"
+      responses:
+        "201":
+          description: Deployed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DealContract"
+
+  /workspaces/{workspaceId}/fund:
+    post:
+      operationId: fundWorkspace
+      tags: [workspaces]
+      summary: Fund escrow from a KYB-verified org wallet (requires canFund)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FundInput"
+      responses:
+        "202":
+          description: Funding initiated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferResponse"
+
+  /workspaces/{workspaceId}/start:
+    post:
+      operationId: startWorkspace
+      tags: [workspaces]
+      summary: Move a funded workspace into IN_PROGRESS
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Workspace started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DealWorkspace"
+
+  /workspaces/{workspaceId}/settle:
+    post:
+      operationId: settleWorkspace
+      tags: [workspaces]
+      summary: Settle a milestone and complete or partially settle the workspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceSettleInput"
+      responses:
+        "200":
+          description: Workspace settlement recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSettleResponse"
+
+  /workspaces/{workspaceId}/evidence:
+    get:
+      operationId: listEvidence
+      tags: [workspaces]
+      summary: List evidence submitted to a workspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Evidence
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Evidence"
+    post:
+      operationId: submitEvidence
+      tags: [workspaces]
+      summary: Submit delivery evidence while the workspace is IN_PROGRESS
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/EvidenceUploadInput"
+      responses:
+        "201":
+          description: Submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Evidence"
+
+  /workspaces/{workspaceId}/milestones:
+    get:
+      operationId: listMilestones
+      tags: [workspaces]
+      summary: List milestones for a deal contract
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Milestones
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Milestone"
+    post:
+      operationId: createMilestone
+      tags: [workspaces]
+      summary: Create a milestone for the workspace deal contract
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MilestoneInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Milestone"
+
+  /workspaces/{workspaceId}/milestones/{milestoneId}/approve:
+    post:
+      operationId: approveMilestone
+      tags: [workspaces]
+      summary: Approve a milestone while the workspace is AWAITING_ACCEPTANCE
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: milestoneId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Milestone"
+
+  /workspaces/{workspaceId}/dispute:
+    get:
+      operationId: getDispute
+      tags: [workspaces]
+      summary: Get open dispute for a workspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Dispute
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dispute"
+    post:
+      operationId: openDispute
+      tags: [workspaces]
+      summary: Open a dispute while work is IN_PROGRESS or AWAITING_ACCEPTANCE
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DisputeInput"
+      responses:
+        "201":
+          description: Dispute opened
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dispute"
+
+  /workspaces/{workspaceId}/reputation:
+    get:
+      operationId: listReputation
+      tags: [workspaces]
+      summary: Get reputation records for a completed workspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Reputation records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReputationRecord"
+    post:
+      operationId: submitReputation
+      tags: [workspaces]
+      summary: Submit a reputation review for the counterparty
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReputationInput"
+      responses:
+        "201":
+          description: Submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReputationRecord"
+
+  /workspaces/{workspaceId}/activity:
+    get:
+      operationId: listWorkspaceActivity
+      tags: [workspaces]
+      summary: List activity log for a workspace
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: workspaceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Activity log
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityLogEntry"
+
+  # ─── Webhooks ────────────────────────────────────────────────────────────────
+
+  /webhooks/circle:
+    post:
+      operationId: circleWebhook
+      tags: [webhooks]
+      summary: Circle wallet webhook listener
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CircleWebhookPayload"
+      responses:
+        "200":
+          description: Acknowledged
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # ── Shared ──────────────────────────────────────────────────────────────────
+
+    HealthStatus:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    # ── Auth ────────────────────────────────────────────────────────────────────
+
+    UserRegistrationInput:
+      type: object
+      additionalProperties: false
+      required: [email, password, name]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+          minLength: 8
+        name:
+          type: string
+
+    LoginInput:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+
+    AuthResponse:
+      type: object
+      additionalProperties: false
+      required: [token, user]
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, email, name, createdAt]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    # ── Organizations ────────────────────────────────────────────────────────────
+
+    OrganizationInput:
+      type: object
+      additionalProperties: false
+      required: [legalName, country, industry]
+      properties:
+        legalName:
+          type: string
+        tradingName:
+          type: ["string", "null"]
+        country:
+          type: string
+        industry:
+          type: string
+        regionsServed:
+          type: array
+          items:
+            type: string
+        registrationNumber:
+          type: ["string", "null"]
+        taxId:
+          type: ["string", "null"]
+        publicProfile: {}
+
+    OrganizationUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        tradingName:
+          type: ["string", "null"]
+        regionsServed:
+          type: array
+          items:
+            type: string
+        publicProfile: {}
+
+    Organization:
+      type: object
+      additionalProperties: false
+      required: [id, legalName, country, industry, verificationStatus, createdAt]
+      properties:
+        id:
+          type: string
+        legalName:
+          type: string
+        tradingName:
+          type: ["string", "null"]
+        country:
+          type: string
+        industry:
+          type: string
+        regionsServed:
+          type: array
+          items:
+            type: string
+        verificationStatus:
+          type: string
+          enum: [UNVERIFIED, PENDING, VERIFIED, REJECTED, EXPIRED]
+        publicProfile: {}
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ReputationSummary:
+      type: object
+      additionalProperties: false
+      required: [completedDeals, disputedDeals, financedDeals, totalVolume, score]
+      properties:
+        completedDeals:
+          type: string
+        disputedDeals:
+          type: string
+        financedDeals:
+          type: string
+        totalVolume:
+          type: string
+        score:
+          type: string
+
+    OrganizationDiscoveryStats:
+      type: object
+      additionalProperties: false
+      required: [identityId, verifiedAt, verificationExpiresAt, reputation]
+      properties:
+        identityId:
+          type: ["string", "null"]
+        verifiedAt:
+          type: ["string", "null"]
+          format: date-time
+        verificationExpiresAt:
+          type: ["string", "null"]
+          format: date-time
+        reputation:
+          $ref: "#/components/schemas/ReputationSummary"
+
+    OrganizationDiscoveryItem:
+      type: object
+      additionalProperties: false
+      required: [id, legalName, country, industry, verificationStatus, createdAt, stats]
+      properties:
+        id:
+          type: string
+        legalName:
+          type: string
+        tradingName:
+          type: ["string", "null"]
+        country:
+          type: string
+        industry:
+          type: string
+        regionsServed:
+          type: array
+          items:
+            type: string
+        verificationStatus:
+          type: string
+          enum: [UNVERIFIED, PENDING, VERIFIED, REJECTED, EXPIRED]
+        publicProfile: {}
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        stats:
+          $ref: "#/components/schemas/OrganizationDiscoveryStats"
+
+    OrganizationMember:
+      type: object
+      additionalProperties: false
+      required: [id, organizationId, userId, role, isAuthorizedSigner, joinedAt]
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        userId:
+          type: string
+        role:
+          type: string
+          enum: [OWNER, ADMIN, FINANCE, MEMBER]
+        isAuthorizedSigner:
+          type: boolean
+        invitedBy:
+          type: ["string", "null"]
+        joinedAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type: ["string", "null"]
+
+    MemberInviteInput:
+      type: object
+      additionalProperties: false
+      required: [email, role]
+      properties:
+        email:
+          type: string
+        role:
+          type: string
+          enum: [ADMIN, FINANCE, MEMBER]
+        isAuthorizedSigner:
+          type: boolean
+
+    MemberUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        role:
+          type: string
+          enum: [ADMIN, FINANCE, MEMBER]
+        isAuthorizedSigner:
+          type: boolean
+
+    # ── Verification ────────────────────────────────────────────────────────────
+
+    VerificationCase:
+      type: object
+      additionalProperties: false
+      required: [id, organizationId, status, createdAt]
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        status:
+          type: string
+          enum: [SUBMITTED, IN_REVIEW, APPROVED, REJECTED, MORE_INFO_NEEDED]
+        reviewerAdminId:
+          type: ["string", "null"]
+        decisionNotes:
+          type: ["string", "null"]
+        decidedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    VerificationCaseDetail:
+      allOf:
+        - $ref: "#/components/schemas/VerificationCase"
+        - type: object
+          additionalProperties: false
+          properties:
+            documents:
+              type: array
+              items:
+                $ref: "#/components/schemas/DocumentRef"
+
+    VerificationDecisionInput:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [APPROVED, REJECTED, MORE_INFO_NEEDED]
+        notes:
+          type: string
+
+    VerificationAttestation:
+      type: object
+      additionalProperties: false
+      required: [id, organizationId, claim, issuer, issuedAt, expiresAt, revoked]
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        claim:
+          type: string
+        issuer:
+          type: string
+        reviewerId:
+          type: ["string", "null"]
+        issuedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        revoked:
+          type: boolean
+
+    # ── Documents ───────────────────────────────────────────────────────────────
+
+    DocumentRef:
+      type: object
+      additionalProperties: false
+      required: [id, organizationId, docType, ipfsCid, contentHash, uploadedBy, uploadedAt]
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        docType:
+          type: string
+          enum: [REGISTRATION_CERT, ID, PROOF_OF_ADDRESS, AGREEMENT, INVOICE, EVIDENCE, OTHER]
+        ipfsCid:
+          type: string
+        contentHash:
+          type: string
+        uploadedBy:
+          type: string
+        uploadedAt:
+          type: string
+          format: date-time
+
+    DocumentUploadInput:
+      type: object
+      additionalProperties: false
+      required: [file, docType]
+      properties:
+        file:
+          type: string
+          description: Binary file content (multipart/form-data)
+        docType:
+          type: string
+          enum: [REGISTRATION_CERT, ID, PROOF_OF_ADDRESS, AGREEMENT, INVOICE, EVIDENCE, OTHER]
+
+    # ── Wallets ─────────────────────────────────────────────────────────────────
+
+    WalletInfo:
+      type: object
+      additionalProperties: false
+      required: [id, organizationId, circleWalletId, blockchainAddress, chain, walletType, purpose, createdAt]
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        circleWalletId:
+          type: string
+        blockchainAddress:
+          type: string
+        chain:
+          type: string
+        walletType:
+          type: string
+          enum: [USER_CONTROLLED, DEVELOPER_CONTROLLED]
+        purpose:
+          type: string
+          enum: [TREASURY, PROCUREMENT, SALES_RECEIPT, PLATFORM]
+        balances:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              amount:
+                type: string
+              currency:
+                type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    TransferInput:
+      type: object
+      additionalProperties: false
+      required: [amount, currency, destinationAddress, destinationChain]
+      properties:
+        amount:
+          type: string
+        currency:
+          type: string
+        destinationAddress:
+          type: string
+        destinationChain:
+          type: string
+        idempotencyKey:
+          type: string
+
+    TransferResponse:
+      type: object
+      additionalProperties: false
+      required: [transferId, status]
+      properties:
+        transferId:
+          type: string
+        status:
+          type: string
+
+    # ── Connections ──────────────────────────────────────────────────────────────
+
+    Connection:
+      type: object
+      additionalProperties: false
+      required: [id, requestingOrgId, targetOrgId, status, createdAt]
+      properties:
+        id:
+          type: string
+        requestingOrgId:
+          type: string
+        targetOrgId:
+          type: string
+        reason:
+          type: ["string", "null"]
+        proposedDealCategory:
+          type: ["string", "null"]
+        approxValue:
+          type: ["string", "null"]
+        timeline:
+          type: ["string", "null"]
+        requiresNda:
+          type: boolean
+        status:
+          type: string
+          enum: [PENDING, ACCEPTED, DECLINED, PROFILE_ONLY]
+        createdAt:
+          type: string
+          format: date-time
+        respondedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    ConnectionInput:
+      type: object
+      additionalProperties: false
+      required: [requestingOrgId, targetOrgId]
+      properties:
+        requestingOrgId:
+          type: string
+        targetOrgId:
+          type: string
+        reason:
+          type: string
+        proposedDealCategory:
+          type: string
+        approxValue:
+          type: string
+        timeline:
+          type: string
+        requiresNda:
+          type: boolean
+
+    ConnectionRespondInput:
+      type: object
+      additionalProperties: false
+      required: [response]
+      properties:
+        response:
+          type: string
+          enum: [ACCEPTED, DECLINED, PROFILE_ONLY]
+        createWorkspace:
+          type: boolean
+
+    # ── Workspaces ───────────────────────────────────────────────────────────────
+
+    DealWorkspace:
+      type: object
+      additionalProperties: false
+      required: [id, title, status, participantOrgIds, createdAt]
+      properties:
+        id:
+          type: string
+        connectionId:
+          type: ["string", "null"]
+        title:
+          type: string
+        objectiveSummary:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum:
+            [
+              DISCOVERED,
+              CONNECTION_REQUESTED,
+              QUALIFYING,
+              WORKSPACE_ACTIVE,
+              REQUIREMENTS_DEFINED,
+              PROPOSAL_SUBMITTED,
+              NEGOTIATING,
+              TERMS_AGREED,
+              INTERNAL_APPROVAL,
+              CONTRACT_SIGNED,
+              AWAITING_FUNDING,
+              FUNDED,
+              IN_PROGRESS,
+              AWAITING_ACCEPTANCE,
+              COMPLETED,
+              CANCELLED,
+              REVISION_REQUIRED,
+              DISPUTED,
+              REFUNDED,
+              PARTIALLY_SETTLED,
+            ]
+        participantOrgIds:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    WorkspaceInput:
+      type: object
+      additionalProperties: false
+      required: [connectionId, title]
+      properties:
+        connectionId:
+          type: string
+        title:
+          type: string
+        objectiveSummary:
+          type: string
+
+    WorkspaceMember:
+      type: object
+      additionalProperties: false
+      required: [id, workspaceId, organizationId, userId, canPropose, canApproveTerms, canSign, canFund, addedAt]
+      properties:
+        id:
+          type: string
+        workspaceId:
+          type: string
+        organizationId:
+          type: string
+        userId:
+          type: string
+        orgRole:
+          type: string
+        canPropose:
+          type: boolean
+        canApproveTerms:
+          type: boolean
+        canSign:
+          type: boolean
+        canFund:
+          type: boolean
+        addedAt:
+          type: string
+          format: date-time
+        removedAt:
+          type: ["string", "null"]
+          format: date-time
+
+    WorkspaceMemberInput:
+      type: object
+      additionalProperties: false
+      required: [userId, organizationId]
+      properties:
+        userId:
+          type: string
+        organizationId:
+          type: string
+        canPropose:
+          type: boolean
+        canApproveTerms:
+          type: boolean
+        canSign:
+          type: boolean
+        canFund:
+          type: boolean
+
+    Message:
+      type: object
+      additionalProperties: false
+      required: [id, workspaceId, senderUserId, senderOrgId, body, createdAt]
+      properties:
+        id:
+          type: string
+        workspaceId:
+          type: string
+        senderUserId:
+          type: string
+        senderOrgId:
+          type: string
+        body:
+          type: string
+        linkedObjectType:
+          type: ["string", "null"]
+        linkedObjectId:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    MessageInput:
+      type: object
+      additionalProperties: false
+      required: [body, senderOrgId]
+      properties:
+        body:
+          type: string
+        senderOrgId:
+          type: string
+
+    MessageConvertInput:
+      type: object
+      additionalProperties: false
+      required: [targetType, senderOrgId]
+      properties:
+        targetType:
+          type: string
+          enum: [REQUIREMENT, PROPOSAL]
+        senderOrgId:
+          type: string
+        fields: {}
+
+    MessageConvertResponse:
+      type: object
+      additionalProperties: false
+      required: [objectType, objectId]
+      properties:
+        objectType:
+          type: string
+        objectId:
+          type: string
+
+    Requirement:
+      type: object
+      additionalProperties: false
+      required: [id, workspaceId, createdByOrgId, fields, status, createdAt]
+      properties:
+        id:
+          type: string
+        workspaceId:
+          type: string
+        createdByOrgId:
+          type: string
+        fields: {}
+        status:
+          type: string
+          enum: [DRAFT, PUBLISHED, SUPERSEDED]
+        createdAt:
+          type: string
+          format: date-time
+
+    RequirementInput:
+      type: object
+      additionalProperties: false
+      required: [createdByOrgId, fields]
+      properties:
+        createdByOrgId:
+          type: string
+        fields: {}
+
+    Proposal:
+      type: object
+      additionalProperties: false
+      required: [id, workspaceId, version, proposedByOrgId, terms, status, createdAt]
+      properties:
+        id:
+          type: string
+        workspaceId:
+          type: string
+        version:
+          type: integer
+        proposedByOrgId:
+          type: string
+        supersedesProposalId:
+          type: ["string", "null"]
+        requirementId:
+          type: ["string", "null"]
+        templateId:
+          type: ["string", "null"]
+        terms: {}
+        status:
+          type: string
+          enum: [DRAFT, COUNTERED, ACCEPTED, WITHDRAWN, EXPIRED]
+        createdAt:
+          type: string
+          format: date-time
+
+    ProposalInput:
+      type: object
+      additionalProperties: false
+      required: [proposedByOrgId, terms]
+      properties:
+        proposedByOrgId:
+          type: string
+        supersedesProposalId:
+          type: string
+        requirementId:
+          type: string
+        terms: {}
+
+    TermSheet:
+      type: object
+      additionalProperties: false
+      required: [id, workspaceId, acceptedProposalId, terms, createdAt]
+      properties:
+        id:
+          type: string
+        workspaceId:
+          type: string
+        acceptedProposalId:
+          type: string
+        terms: {}
+        createdAt:
+          type: string
+          format: date-time
+
+    ApprovalRequest:
+      type: object
+      additionalProperties: false
+      required: [id, workspaceId, organizationId, termSheetId, policyTier, status, createdAt]
+      properties:
+        id:
+          type: string
+        workspaceId:
+          type: string
+        organizationId:
+          type: string
+        termSheetId:
+          type: string
+        requiredApprovers:
+          type: array
+          items: {}
+        policyTier:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED]
+        resolvedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    ApprovalDecisionInput:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [APPROVED, REJECTED]
+        notes:
+          type: string
+
+    Agreement:
+      type: object
+      additionalProperties: false
+      required: [id, workspaceId, termSheetId, agreementHash, signatures, status, createdAt]
+      properties:
+        id:
+          type: string
+        workspaceId:
+          type: string
+        termSheetId:
+          type: string
+        documentRefId:
+          type: ["string", "null"]
+        agreementHash:
+          type: string
+        signatures:
+          type: array
+          items: {}
+        status:
+          type: string
+          enum: [DRAFTED, UNDER_REVIEW, LOCKED, SIGNED]
+        createdAt:
+          type: string
+          format: date-time
+
+    AgreementUploadInput:
+      type: object
+      additionalProperties: false
+      required: [file, termSheetId]
+      properties:
+        file:
+          type: string
+          description: Binary file content (multipart/form-data)
+        termSheetId:
+          type: string
+
+    DealContract:
+      type: object
+      additionalProperties: false
+      required: [id, workspaceId, agreementId, settlementStatus, createdAt]
+      properties:
+        id:
+          type: string
+        workspaceId:
+          type: string
+        agreementId:
+          type: string
+        templateId:
+          type: ["string", "null"]
+        chain:
+          type: ["string", "null"]
+        contractAddress:
+          type: ["string", "null"]
+        settlementStatus:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    ContractDeployInput:
+      type: object
+      additionalProperties: false
+      required: [templateId, chain]
+      properties:
+        templateId:
+          type: string
+        chain:
+          type: string
+
+    FundInput:
+      type: object
+      additionalProperties: false
+      required: [amount, currency]
+      properties:
+        amount:
+          type: string
+        currency:
+          type: string
+        idempotencyKey:
+          type: string
+
+    Milestone:
+      type: object
+      additionalProperties: false
+      required: [id, dealContractId, amount, status]
+      properties:
+        id:
+          type: string
+        dealContractId:
+          type: string
+        descriptionHash:
+          type: ["string", "null"]
+        description:
+          type: string
+        amount:
+          type: string
+        dueDate:
+          type: ["string", "null"]
+          format: date-time
+        status:
+          type: string
+          enum: [PENDING, SUBMITTED, APPROVED, DISPUTED, RELEASED, SETTLED]
+
+    MilestoneInput:
+      type: object
+      additionalProperties: false
+      required: [description, amount]
+      properties:
+        description:
+          type: string
+        descriptionHash:
+          type: string
+          description: Optional SHA-256 hash; generated from description when omitted
+        amount:
+          type: string
+        dueDate:
+          type: string
+          format: date-time
+
+    Evidence:
+      type: object
+      additionalProperties: false
+      required: [id, workspaceId, submittedByOrgId, evidenceType, contentHash, createdAt]
+      properties:
+        id:
+          type: string
+        workspaceId:
+          type: string
+        milestoneId:
+          type: ["string", "null"]
+        submittedByOrgId:
+          type: string
+        evidenceType:
+          type: string
+          enum:
+            [
+              DELIVERY_RECEIPT,
+              TRACKING,
+              COMPLETION_CERT,
+              INSPECTION_REPORT,
+              DELIVERABLE,
+              INVOICE,
+              OTHER,
+            ]
+        documentRefId:
+          type: ["string", "null"]
+        contentHash:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    WorkspaceSettleInput:
+      type: object
+      additionalProperties: false
+      required: [milestoneId]
+      properties:
+        milestoneId:
+          type: string
+        settlementStatus:
+          type: string
+          enum: [COMPLETED, PARTIALLY_SETTLED]
+
+    WorkspaceSettleResponse:
+      type: object
+      additionalProperties: false
+      required: [workspaceId, contractId, settlementStatus]
+      properties:
+        workspaceId:
+          type: string
+        contractId:
+          type: string
+        milestoneId:
+          type: [string, null]
+        settlementStatus:
+          type: string
+          enum: [COMPLETED, PARTIALLY_SETTLED]
+
+    EvidenceUploadInput:
+      type: object
+      additionalProperties: false
+      required: [file, evidenceType, submittedByOrgId]
+      properties:
+        file:
+          type: string
+          description: Binary file content (multipart/form-data)
+        evidenceType:
+          type: string
+          enum:
+            [
+              DELIVERY_RECEIPT,
+              TRACKING,
+              COMPLETION_CERT,
+              INSPECTION_REPORT,
+              DELIVERABLE,
+              INVOICE,
+              OTHER,
+            ]
+        submittedByOrgId:
+          type: string
+        milestoneId:
+          type: string
+
+    Dispute:
+      type: object
+      additionalProperties: false
+      required: [id, workspaceId, openedByOrgId, reason, status, createdAt]
+      properties:
+        id:
+          type: string
+        workspaceId:
+          type: string
+        dealContractId:
+          type: ["string", "null"]
+        openedByOrgId:
+          type: string
+        reason:
+          type: string
+        status:
+          type: string
+          enum: [OPEN, EVIDENCE_PERIOD, UNDER_REVIEW, RESOLVED]
+        arbitratorId:
+          type: ["string", "null"]
+        resolution:
+          type: ["string", "null"]
+          enum: [FULL_RELEASE, FULL_REFUND, SPLIT, MILESTONE_SPECIFIC, null]
+        resolvedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    DisputeInput:
+      type: object
+      additionalProperties: false
+      required: [openedByOrgId, reason]
+      properties:
+        openedByOrgId:
+          type: string
+        reason:
+          type: string
+
+    ReputationRecord:
+      type: object
+      additionalProperties: false
+      required: [id, organizationId, workspaceId, counterpartyOrgId, roleInDeal, dimensions, createdAt]
+      properties:
+        id:
+          type: string
+        organizationId:
+          type: string
+        workspaceId:
+          type: string
+        counterpartyOrgId:
+          type: string
+        roleInDeal:
+          type: string
+          enum: [BUYER, SELLER]
+        dimensions: {}
+        createdAt:
+          type: string
+          format: date-time
+
+    ReputationInput:
+      type: object
+      additionalProperties: false
+      required: [organizationId, counterpartyOrgId, roleInDeal, dimensions]
+      properties:
+        organizationId:
+          type: string
+        counterpartyOrgId:
+          type: string
+        roleInDeal:
+          type: string
+          enum: [BUYER, SELLER]
+        dimensions:
+          type: object
+          additionalProperties: false
+          properties:
+            onTime:
+              type: integer
+              minimum: 1
+              maximum: 5
+            qualityMatch:
+              type: integer
+              minimum: 1
+              maximum: 5
+            communication:
+              type: integer
+              minimum: 1
+              maximum: 5
+            disputeInvolved:
+              type: boolean
+            wouldRepeat:
+              type: boolean
+
+    ActivityLogEntry:
+      type: object
+      additionalProperties: false
+      required: [id, workspaceId, actorId, actorOrgId, action, createdAt]
+      properties:
+        id:
+          type: string
+        workspaceId:
+          type: string
+        actorId:
+          type: string
+        actorOrgId:
+          type: string
+        action:
+          type: string
+        metadata: {}
+        createdAt:
+          type: string
+          format: date-time
+
+    CircleWebhookPayload:
+      type: object
+      additionalProperties: false
+      properties:
+        clientId:
+          type: string
+        notificationType:
+          type: string
+        version:
+          type: integer
+        customAttributes: {}
+        transfer: {}
+        transaction: {}

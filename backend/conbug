@@ -1,0 +1,177 @@
+                                                                                                                                                
+• The backend has organization management, but it does not yet have company discovery or public company statistics.                              
+                                                                                                                                                 
+  ## Discovery verdict                                                                                                                           
+                                                                                                                                                 
+   Capability                             Status                 Finding                                                                         
+  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  ━━━━━━━━━━━━━━━━━━━━━  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━            
+   Create organization                    Present                POST /organizations                                                             
+  ─────────────────────────────────────  ─────────────────────  ─────────────────────────────────────────────────────────────────────            
+   Get organization by ID                 Present                Authenticated, but returns wallet details                                       
+  ─────────────────────────────────────  ─────────────────────  ─────────────────────────────────────────────────────────────────────            
+   Search/list organizations              Missing                No GET /organizations                                                           
+  ─────────────────────────────────────  ─────────────────────  ─────────────────────────────────────────────────────────────────────            
+   Filter by country/industry/region      Missing                Fields exist in DB but have no API filters                                      
+  ─────────────────────────────────────  ─────────────────────  ─────────────────────────────────────────────────────────────────────            
+   Pagination/ranking                     Missing                No discovery query model                                                        
+  ─────────────────────────────────────  ─────────────────────  ─────────────────────────────────────────────────────────────────────            
+   Verification filter                    Missing                Cannot request verified companies only                                          
+  ─────────────────────────────────────  ─────────────────────  ─────────────────────────────────────────────────────────────────────            
+   Public company statistics              Missing                Reputation records exist, but nothing aggregates them                           
+  ─────────────────────────────────────  ─────────────────────  ─────────────────────────────────────────────────────────────────────            
+   Company profile endpoint               Partial                The ID endpoint mixes public profile and private wallet information             
+  ─────────────────────────────────────  ─────────────────────  ─────────────────────────────────────────────────────────────────────            
+   Opportunity marketplace/AI matching    Not required for v1    Explicitly marked post-MVP by the architecture                                  
+                                                                                                                                                 
+  The architecture assumes that discovery feeds the connection flow: company search → connection request → workspace. See backend/               
+  attached_assets/deal-workspace-architecture_1783883529099.md:171.                                                                              
+                                                                                                                                                 
+  The database already contains useful discovery fields—legal/trading name, country, industry, regions, verification status, and publicProfile—in
+  backend/lib/db/src/schema/organizations.ts:24. However, backend/artifacts/api-server/src/routes/organizations.ts:21 only provides creation and 
+  an ID lookup at line 138.                                                                                                                      
+                                                                                                                                                 
+  The OpenAPI contract confirms that /organizations is POST-only in backend/lib/api-spec/openapi.yaml:116.                                       
+                                                                                                                                                 
+  ## Statistics and reputation                                                                                                                   
+                                                                                                                                                 
+  Reputation capture is partially implemented:                                                                                                   
+                                                                                                                                                 
+  - reputation_records stores review dimensions.                                                                                                 
+  - Workspace reputation has GET and POST endpoints.                                                                                             
+  - Reviews are now restricted to the submitting organization and another workspace participant.                                                 
+                                                                                                                                                 
+  But there is no public aggregation such as:                                                                                                    
+                                                                                                                                                 
+  - Completed-deal count                                                                                                                         
+  - On-time delivery percentage                                                                                                                  
+  - Quality and communication averages                                                                                                           
+  - Repeat-business rate                                                                                                                         
+  - Dispute rate                                                                                                                                 
+  - Response-time or response-rate statistics                                                                                                    
+  - Buyer/seller activity split                                                                                                                  
+  - Verified-since date or verification confidence                                                                                               
+                                                                                                                                                 
+  The architecture specifically calls for privacy-safe ranges and percentages rather than transaction values. The current API returns raw        
+  workspace reputation records instead of aggregated organization statistics.                                                                    
+                                                                                                                                                 
+  There are also unresolved integrity issues:                                                                                                    
+                                                                                                                                                 
+  - Reviews are not unique per workspace/reviewer/counterparty.                                                                                  
+  - Objective signals are not derived from WorkspaceActivityLog.                                                                                 
+  - Reputation creation itself is not activity-logged.                                                                                           
+  - Caller-provided dimensions are trusted directly.                                                                                             
+                                                                                                                                                 
+  ## Important architecture gaps                                                                                                                 
+                                                                                                                                                 
+  ### P0 — Authorization and isolation                                                                                                           
+                                                                                                                                                 
+  Several routes authenticate the user but do not establish that they belong to the workspace:                                                   
+                                                                                                                                                 
+  - Workspace, messages, proposals, approvals, agreements, evidence, milestones, disputes, reputation, and activity GET endpoints.               
+  - Adding a workspace member has no workspace-admin check.                                                                                      
+  - Sending messages and creating requirements trust organization IDs supplied in the request.                                                   
+  - Milestone approval does not verify that the milestone belongs to the route’s workspace.                                                      
+  - Organization members can be listed without checking organization membership, exposing member emails.                                         
+  - GET /organizations/:orgId returns wallet and identity records to any authenticated user.                                                     
+                                                                                                                                                 
+  This is currently the most serious issue.                                                                                                      
+                                                                                                                                                 
+  ### P0 — Workspace creation invariant                                                                                                          
+                                                                                                                                                 
+  The architecture says a workspace should originate from an accepted connection. The standalone creation route currently allows:                
+                                                                                                                                                 
+  - An omitted connection                                                                                                                        
+  - An unchecked connection                                                                                                                      
+  - Empty participant organizations                                                                                                              
+  - No default workspace members                                                                                                                 
+                                                                                                                                                 
+  See backend/artifacts/api-server/src/routes/workspaces.ts:79.                                                                                  
+                                                                                                                                                 
+  Connection acceptance does create a workspace, but only adds the responder as a workspace member; it does not add defaults from both           
+  organizations. See backend/artifacts/api-server/src/routes/connections.ts:114.                                                                 
+                                                                                                                                                 
+  Connection authorization also has a query bug: it retrieves the first member of an organization and then compares that member to the caller,   
+  instead of querying by both organization and user.                                                                                             
+                                                                                                                                                 
+  ### P1 — State machine                                                                                                                         
+                                                                                                                                                 
+  updateWorkspaceStatus writes statuses directly without validating allowed transitions. There is no centralized transition service.             
+                                                                                                                                                 
+  Missing flow actions include:                                                                                                                  
+                                                                                                                                                 
+  - Start work: FUNDED → IN_PROGRESS                                                                                                             
+  - Accept delivery                                                                                                                              
+  - Partially accept delivery                                                                                                                    
+  - Request corrections                                                                                                                          
+  - Return REVISION_REQUIRED → IN_PROGRESS                                                                                                       
+  - Release/settle escrow                                                                                                                        
+  - Complete a workspace                                                                                                                         
+  - Resolve a dispute                                                                                                                            
+                                                                                                                                                 
+  Because funding currently stops at FUNDED, evidence’s new IN_PROGRESS gate may be unreachable unless a webhook performs that transition.       
+                                                                                                                                                 
+  There is also a semantic issue: internal approval currently changes the workspace to CONTRACT_SIGNED before the agreement has been uploaded or 
+  signed.                                                                                                                                        
+                                                                                                                                                 
+  ### P1 — Internal approval policy                                                                                                              
+
+  The architecture defines value-based approval tiers. The implementation currently creates:                                                     
+                                                                                                                                                 
+  requiredApprovers: []                                                                                                                          
+  policyTier: "STANDARD"                                                                                                                         
+                                                                                                                                                 
+  It does not derive the tier from deal value or require finance/legal/director approvals.                                                       
+                                                                                                                                                 
+  ### P1 — Contract deployment fidelity                                                                                                          
+                                                                                                                                                 
+  DealFactory is now invoked and the address is saved, but deployment passes the default "0x" parameters. The architecture requires the exact    
+  locked TermSheet.terms to be encoded and deployed, ensuring the signed terms match the on-chain contract.                                      
+                                                                                                                                                 
+  ### P1 — Activity log completeness                                                                                                             
+                                                                                                                                                 
+  The architecture requires every mutation and state transition to be logged. Current gaps include:                                              
+                                                                                                                                                 
+  - Workspace creation                                                                                                                           
+  - Reputation creation                                                                                                                          
+  - Organization and connection actions                                                                                                          
+  - Status changes as first-class events                                                                                                         
+                                                                                                                                                 
+  Mutations and activity logs also are not wrapped in database transactions, so a mutation can succeed while its audit entry fails.              
+                                                                                                                                                 
+  ### P1 — Database integrity                                                                                                                    
+                                                                                                                                                 
+  Important constraints and indexes are absent:                                                                                                  
+                                                                                                                                                 
+  - Unique organization membership                                                                                                               
+  - Unique workspace membership                                                                                                                  
+  - One approval per organization and term sheet                                                                                                 
+  - One agreement/contract per workspace                                                                                                         
+  - One reputation review per reviewer/counterparty/workspace                                                                                    
+  - One active dispute per workspace                                                                                                             
+  - Foreign key for supersedesProposalId                                                                                                         
+  - Search indexes for organization discovery                                                                                                    
+  - Constrained status and role values                                                                                                           
+                                                                                                                                                 
+  ### P2 — Other gaps                                                                                                                            
+                                                                                                                                                 
+  - Signing counts two user signatures, rather than one authorized signature per participant organization.                                       
+  - Repeat-business POST /workspaces/:id/duplicate is absent, although explicitly post-MVP.                                                      
+  - Generated API clients likely need regeneration after the recent OpenAPI milestone changes.                                                   
+  - Organization publicProfile is unconstrained JSON, so discovery results cannot provide a dependable shape.                                    
+                                                                                                                                                 
+  ## Recommended implementation order                                                                                                            
+                                                                                                                                                 
+  1. Apply workspace membership and object-scope authorization to every route.                                                                   
+  2. Enforce workspace creation from an accepted connection and populate both organizations.                                                     
+  3. Add organization discovery:                                                                                                                 
+     GET /organizations?q=&industry=&country=&region=&verified=&page=&limit=.                                                                    
+                                                                                                                                                 
+  4. Add privacy-safe organization statistics:                                                                                                   
+     GET /organizations/:orgId/stats, or embed publicStats in discovery results.                                                                 
+                                                                                                                                                 
+  5. Create a centralized transactional state-transition and activity-log service.                                                               
+  6. Add database uniqueness, foreign keys, and discovery indexes.                                                                               
+  7. Implement approval tiers, acceptance/correction, settlement, and dispute resolution.                                                        
+  8. Encode the locked term-sheet terms for DealFactory deployment.                                                                              
+                                                                                                                                                 
+  No files were changed during this analysis.    

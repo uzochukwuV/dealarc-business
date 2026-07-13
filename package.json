@@ -1,0 +1,13 @@
+﻿{
+  "name": "hardbusiness-monorepo",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r --if-present run build",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "frontend:dev": "pnpm --dir frontend dev",
+    "frontend:build": "pnpm --dir frontend build",
+    "backend:build": "pnpm --dir backend build",
+    "contracts:test": "pnpm --dir smart-contract exec hardhat test",
+    "contracts:deploy": "pnpm --dir smart-contract exec hardhat ignition deploy ignition/modules/Counter.ts"
+  }
+}

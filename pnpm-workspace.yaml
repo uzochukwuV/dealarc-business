@@ -1,0 +1,8 @@
+﻿packages:
+  - frontend
+  - backend
+  - backend/artifacts/*
+  - backend/lib/*
+  - backend/lib/integrations/*
+  - backend/scripts
+  - smart-contract

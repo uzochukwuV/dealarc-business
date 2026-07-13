@@ -1,0 +1,30 @@
+﻿# Dependencies
+**/node_modules/
+.pnpm-store/
+
+# Build outputs and caches
+**/dist/
+**/.cache/
+**/.vite/
+**/coverage/
+**/*.tsbuildinfo
+backend/cache/
+smart-contract/artifacts/
+smart-contract/cache/
+smart-contract/ignition/deployments/
+smart-contract/typechain-types/
+
+# Local environment files
+**/.env
+**/.env.*
+!**/.env.example
+
+# Editor and OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Backed-up nested repos
+backend/.git.backup/
+smart-contract/.git.backup/

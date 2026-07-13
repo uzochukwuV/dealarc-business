@@ -1,0 +1,1 @@
+- [B2B Deal Network Backend](b2b-backend.md) — full backend built and running; key decisions on auth, encryption, Orval/Zod compat, and multer.

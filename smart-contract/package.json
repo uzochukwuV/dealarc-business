@@ -1,0 +1,20 @@
+{
+  "name": "hardhat-project",
+  "version": "1.0.0",
+  "type": "module",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ignition": "^3.1.8",
+    "@nomicfoundation/hardhat-toolbox-viem": "^5.0.7",
+    "@types/node": "^22.20.1",
+    "forge-std": "github:foundry-rs/forge-std#v1.9.4",
+    "hardhat": "^3.9.1",
+    "typescript": "~6.0.3",
+    "viem": "^2.55.0"
+  },
+  "dependencies": {
+    "@nomicfoundation/hardhat-ethers": "^4.0.14",
+    "@nomicfoundation/hardhat-viem": "^3.0.9",
+    "dotenv": "^17.4.2",
+    "ethers": "^6.17.0"
+  }
+}
